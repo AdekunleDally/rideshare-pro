@@ -70,3 +70,35 @@ Frontend Service                Backend APIs
 | Redis Cluster    | StatefulSet          | Pub/Sub & Cache    |
 
 ---
+## AWS Infrastructure
+
+### Region
+
+```text
+us-east-2
+```
+
+### EKS Cluster
+
+```text
+Cluster Name: rideshare-cluster
+Kubernetes Version: v1.34+
+```
+
+### Node Group
+
+| Property         | Value     |
+| ---------------- | --------- |
+| Instance Type    | t3.large |
+| Desired Capacity | 2       |
+| Min Nodes        | 2         |
+| Max Nodes        | 6        |
+
+### Networking
+
+* VPC CIDR: 192.168.0.0/16
+* 3 Public Subnets
+* 3 Private Subnets
+* NAT Gateway
+* Route Tables
+* Security Groups
