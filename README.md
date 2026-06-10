@@ -186,8 +186,7 @@ rideshare-pro/
 eksctl create cluster -f aws/cluster.yaml
 ```
 ### Install EBS CSI Driver
-This is a Kubernetes component that allows Kubernetes to dynamically create, attach, mount, resize, snapshot, and delete AWS EBS volumes.It can be 
-implemented as a addon  as seen in the eks cluster manifest file
+EBS CSI driver is  is a Kubernetes component that allows Kubernetes to dynamically create, attach, mount, resize, snapshot, and delete AWS EBS volumes.It is implemented as a addon  as seen in the eks cluster manifest file
 
 ```bash
 eksctl create addon --config-file aws/cluster.yaml
@@ -210,3 +209,25 @@ kubectl get sc
 ```
 
 ---
+## Phase 2 – Platform Components
+
+### Install NGINX Ingress Controller
+NGINX Ingress Controller is a Kubernetes component that routes external HTTP/HTTPS traffic into your cluster using NGINX as a reverse proxy. Nginx Ingress Controller acts as the ApI gateway. It sits in front of your backend services and handles:
+
+- Routing requests to the right service
+- Authentication / authorization
+- Rate limiting
+- TLS termination (HTTPS)
+- Request/response filtering
+- Logging and observability
+
+```bash
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+kubectl create namespace ingress-nginx
+
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx \
+  --set controller.service.type=LoadBalancer \
+  --set controller.service.externalTrafficPolicy=Local \
+  --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb"
