@@ -26,3 +26,31 @@ The project showcases:
 * Production troubleshooting workflows
 
 ---
+
+## Architecture
+
+### High-Level Architecture
+
+```text
+Internet User
+      |
+      v
+     DNS
+      |
+      v
+NGINX Ingress Controller
+      |
+      v
+Amazon EKS Cluster
+      |
+      +-----------------------------------+
+      |                                   |
+      v                                   v
+
+Frontend Service                Backend APIs
+
+/api/rider     -> rider-service
+/api/driver    -> driver-service
+/api/trip      -> trip-service
+/ws            -> matching-service
+```
