@@ -1,0 +1,24 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: lukman-rideshare-cluster
+  region: us-east-2
+  version: "1.34"
+
+managedNodeGroups:
+  - name: general-purpose
+    instanceType: t3.large
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 6
+    privateNetworking: true
+    volumeSize: 50
+    labels:
+      role: general
+    tags:
+      k8s.io/cluster-autoscaler/enabled: "true"
+      k8s.io/cluster-autoscaler/lukman-rideshare-cluster: "owned"
+
+iam:
+  withOIDC: true

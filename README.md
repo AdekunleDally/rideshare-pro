@@ -53,4 +53,20 @@ Frontend Service                Backend APIs
 /api/driver    -> driver-service
 /api/trip      -> trip-service
 /ws            -> matching-service
+
 ```
+---
+### Service Architecture
+
+| Service          | Technology           | Purpose            |
+| ---------------- | -------------------- | ------------------ |
+| Frontend         | Next.js / TypeScript | User Interface     |
+| Rider Service    | Node.js / TypeScript | Rider Management   |
+| Driver Service   | Node.js / TypeScript | Driver Management  |
+| Trip Service     | Python Flask         | Trip Lifecycle     |
+| Matching Service | Go                   | Driver Matching    |
+| Email Service    | Python               | Notifications      |
+| PostgreSQL       | StatefulSet          | Persistent Storage |
+| Redis Cluster    | StatefulSet          | Pub/Sub & Cache    |
+
+---
