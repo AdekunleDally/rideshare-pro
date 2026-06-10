@@ -185,3 +185,28 @@ rideshare-pro/
 ```bash
 eksctl create cluster -f aws/cluster.yaml
 ```
+### Install EBS CSI Driver
+This is a Kubernetes component that allows Kubernetes to dynamically create, attach, mount, resize, snapshot, and delete AWS EBS volumes.It can be 
+implemented as a addon  as seen in the eks cluster manifest file
+
+```bash
+eksctl create addon --config-file aws/cluster.yaml
+
+```
+When you run the command above, eksctl  automatically:
+
+- Creates an IAM Role.
+- Attaches the required EBS CSI permissions.
+- Creates the IRSA trust relationship.
+- Associates the role with the EBS CSI ServiceAccount.
+- Installs the AWS-managed EBS CSI addon.
+
+NB: No manual IAM policy creation is needed.
+
+Verify:
+
+```bash
+kubectl get sc
+```
+
+---
