@@ -136,3 +136,43 @@ Kubernetes Version: v1.34+
 * Redis Cluster
 
 ---
+## Repository Structure
+
+```text
+rideshare-pro/
+│
+├── aws/
+│   ├── cluster.yaml
+│ 
+│
+├── platform/
+│   ├── ingress/
+│   ├── cert-manager/
+│   ├── external-secrets/
+│   ├── autoscaling/
+│   └── pdb/
+│
+├── databases/
+│   ├── postgres/
+│   └── redis/
+│
+├── services/
+│   ├── frontend/
+│   ├── rider/
+│   ├── driver/
+│   ├── trip/
+│   ├── matching/
+│   └── email/
+│
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── DEPLOYMENT.md
+│   ├── TROUBLESHOOTING.md
+│   ├── OPERATIONS.md
+│   ├── SECURITY.md
+│   └── DISASTER_RECOVERY.md
+│
+└── README.md
+```
+
+---
