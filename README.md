@@ -102,3 +102,37 @@ Kubernetes Version: v1.34+
 * NAT Gateway
 * Route Tables
 * Security Groups
+## Technology Stack
+
+### Cloud
+
+* AWS EKS
+* AWS EBS
+* AWS Secrets Manager
+* IAM Roles for Service Accounts (IRSA)
+
+### Kubernetes
+
+* Deployments
+* StatefulSets
+* Services
+* Ingress
+* ConfigMaps
+* Secrets
+* HPA
+* PDB
+
+### Platform Components
+
+* NGINX Ingress Controller
+* External Secrets Operator
+* cert-manager
+* Metrics Server
+* EBS CSI Driver
+
+### Databases
+
+* PostgreSQL
+* Redis Cluster
+
+---
