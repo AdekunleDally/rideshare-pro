@@ -176,3 +176,12 @@ rideshare-pro/
 ```
 
 ---
+# Deployment Guide
+
+## Phase 1 – Cluster Setup
+
+### Create EKS Cluster
+
+```bash
+eksctl create cluster -f aws/cluster.yaml
+```
