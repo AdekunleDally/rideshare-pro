@@ -212,7 +212,9 @@ kubectl get sc
 ## Phase 2 – Platform Components
 
 ### Install NGINX Ingress Controller
-NGINX Ingress Controller is a Kubernetes component that routes external HTTP/HTTPS traffic into your cluster using NGINX as a reverse proxy. Nginx Ingress Controller acts as the ApI gateway. It sits in front of your backend services and handles:
+NGINX Ingress Controller is a Kubernetes component that routes external HTTP/HTTPS traffic into a Kubernetes cluster by automatically configuring NGINX, which acts as a reverse proxy and can be used as an API gateway.
+
+As an API gateway, NGINX sits in front of backend services and can provide
 
 - Routing requests to the right service
 - Authentication / authorization
