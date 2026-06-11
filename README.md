@@ -233,3 +233,44 @@ helm install ingress-nginx ingress-nginx/ingress-nginx \
   --set controller.service.type=LoadBalancer \
   --set controller.service.externalTrafficPolicy=Local \
   --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"="nlb"
+
+```
+---
+### Install Cert-Manager on the EKS
+
+Cert-manager is a Kubernetes controller that automates the lifecycle of TLS certificates. It uses a Certificate object as the trigger, and a ClusterIssuer object as the configuration source to determine how and where to contact an external Certificate Authority like Let’s Encrypt.
+
+#### Step 1: Add Helm repo
+```
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+```
+#### Step 2: Create namespace
+```
+kubectl create namespace cert-manager
+```
+
+#### Step 3: Install cert-manager CRDs (IMPORTANT)
+
+This is mandatory.
+```
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.crds.yaml
+```
+
+#### Step 4: Install cert-manager via Helm
+```
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --version v1.14.4 \
+  --set installCRDs=false
+```
+
+#### Step 5: Verify installation
+```
+kubectl get pods -n cert-manager
+```
+#### Step 6: Create a ClusterIssuer (Let’s Encrypt)
+A ClusterIssuer is a cluster-wide configuration resource that tells cert-manager how to communicate with an external certificate authority such as Let's Encrypt, how to prove domain ownership, and how to obtain and renew certificates on behalf of Kubernetes workloads.
+```
+k apply -f platform/cert-manager/cluster-issuer.yaml
+```
