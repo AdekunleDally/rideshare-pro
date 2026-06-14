@@ -324,4 +324,38 @@ kubectl rollout restart deployment external-secrets \
 ```bash
  k apply -f secrets/eso/clustersecretstore.yaml
 ```
+---
+### Install Cluster Autoscaler on the EKS
+Cluster Autoscaler  automatically adjusts the number of worker nodes in the cluster by either scaling out (adding nodes) or scaling in (removing nodes)
 
+#### Create IAM Policy
+```
+curl -O https://raw.githubusercontent.com/kubernetes/autoscaler/master/cluster-autoscaler/cloudprovider/aws/examples/iam-policy.json
+
+aws iam create-policy \
+  --policy-name AmazonEKSClusterAutoscalerPolicy \
+  --policy-document file://iam-policy.json
+```
+#### Create IAM role for Service Account
+```
+eksctl create iamserviceaccount \
+  --cluster=lukman-rideshare-cluster \
+  --namespace=kube-system \
+  --name=cluster-autoscaler \
+  --attach-policy-arn=<POLICY_ARN> \
+  --approve
+
+  NB: you get the POLICY_ARN after creating the iam-policy
+```
+
+#### Deploy Cluster Autoscaler
+##### Download official manifest:
+
+```
+curl -O https://raw.githubusercontent.com/kubernetes/autoscaler/master/cluster-autoscaler/cloudprovider/aws/examples/cluster-autoscaler-autodiscover.yaml
+```
+##### Apply the manifest
+
+```
+kubectl apply -f cluster-autoscaler-autodiscover.yaml
+```
