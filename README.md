@@ -148,7 +148,7 @@ rideshare-pro/
 ├── platform/
 │   ├── ingress/
 │   ├── cert-manager/
-│   ├── external-secrets/
+│   ├── secrets/
 │   ├── autoscaling/
 │   └── pdb/
 │
@@ -274,3 +274,54 @@ A ClusterIssuer is a cluster-wide configuration resource that tells cert-manager
 ```
 k apply -f platform/cert-manager/cluster-issuer.yaml
 ```
+---
+### Install External Secrets Operator
+External Secrets Operator is a Kubernetes operator that synchronizes secrets from external secret stores such as AWS Secrets Manager into Kubernetes Secrets. As a result you dont have to store your secrets in your repo. Rather, you store it in a single source of truth. It uses clustersecretstore/secretstore resource(which define how you connect to the AWS secrets manager) and externalsecrets resource(which defines how each the particular secrets is retrieved from aws secrets manager into kubernetes cluster) to acieve this.
+
+#### Install ESO
+
+```bash
+helm repo add external-secrets https://charts.external-secrets.io
+helm repo update
+
+helm install external-secrets \
+  external-secrets/external-secrets \
+  -n external-secrets \
+  --create-namespace \
+  --set installCRDs=true
+
+```
+Upon installing the helm chart above, ESO gets installed as a deployment
+#### Give ESO Permission to AWS Secrets Manager
+```bash
+. Create IAM Policy
+. Get the OIDC provider ID
+. Use the OIDC provider ID to create trust policy json file
+. Use the trust policy file  to create the IAM role called ExternalSecretsRole
+. Assign the created IAM policy to the IAM role
+. Create service account external-secrets-sa
+
+. Annotate the external-secrets-sa serviceaccount so that whenever a pod uses this ServiceAccount,a temporary AWS credentials for ExternalSecretsRole is given to it.
+
+```
+#### Make  ESO Use the external-secrets-sa ServiceAccount 
+Ugrade the helm installation to use this service account so that the External Secrets Operator Pods run with the correct Kubernetes identity that is mapped via IRSA to an IAM Role. This allows them to securely assume AWS permissions and access AWS Secrets Manager without using node-level credentials or overly permissive default service accounts.
+
+```bash
+helm upgrade external-secrets \
+external-secrets/external-secrets \
+-n external-secrets \
+--set serviceAccount.create=false \
+--set serviceAccount.name=external-secrets-sa
+```
+
+#### Restart ESO
+```bash
+kubectl rollout restart deployment external-secrets \
+-n external-secrets
+```
+#### Create ClusterSecretStore
+```bash
+ k apply -f secrets/eso/clustersecretstore.yaml
+```
+
