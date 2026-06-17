@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres-h
+  replicas: 3
+
+  selector:
+    matchLabels:
+      app: postgres
+
+  template:
+    metadata:
+      labels:
+        app: postgres
+
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+
+          ports:
+            - containerPort: 5432
+
+          envFrom:
+            - secretRef:
+                name: postgres-secret
+
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+
+            - name: postgres-config
+              mountPath: /etc/postgresql
+
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+
+          command:
+            - bash
+            - -c
+            - |
+              set -e
+
+              POD=$(hostname)
+
+              # ========== PRIMARY ==========
+              if [[ "$POD" == "postgres-0" ]]; then
+                echo "Starting PRIMARY"
+
+                exec docker-entrypoint.sh postgres \
+                  -c config_file=/etc/postgresql/postgresql.conf \
+                  -c hba_file=/etc/postgresql/pg_hba.conf
+              fi
+
+              # ========== REPLICAS ==========
+              echo "Starting REPLICA"
+
+              until pg_isready -h postgres-0.postgres-h -U $POSTGRES_USER; do
+                echo "waiting for primary..."
+                sleep 3
+              done
+
+              if [ ! -f "$PGDATA/PG_VERSION" ]; then
+                echo "Cloning primary..."
+
+                rm -rf $PGDATA/*
+
+                PGPASSWORD=$REPLICATION_PASSWORD \
+                pg_basebackup \
+                  -h postgres-0.postgres-h \
+                  -U $REPLICATION_USER \
+                  -D $PGDATA \
+                  -Fp -Xs -P -R
+              fi
+
+              exec docker-entrypoint.sh postgres \
+                -c config_file=/etc/postgresql/postgresql.conf \
+                -c hba_file=/etc/postgresql/pg_hba.conf
+
+      volumes:
+        - name: postgres-config
+          configMap:
+            name: postgres-config
+
+        - name: init-scripts
+          configMap:
+            name: postgres-init-scripts
+
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp2
+        resources:
+          requests:
+            storage: 20Gi

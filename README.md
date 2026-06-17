@@ -152,7 +152,7 @@ rideshare-pro/
 │   ├── autoscaling/
 │   └── pdb/
 │
-├── databases/
+├── stateful/
 │   ├── postgres/
 │   └── redis/
 │
