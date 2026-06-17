@@ -1,0 +1,29 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: rideshare-postgres-cluster
+spec:
+  instances: 3
+
+  imageName: ghcr.io/cloudnative-pg/postgresql:16
+
+  storage:
+    size: 20Gi
+    storageClass: gp2
+
+  bootstrap:
+    initdb:
+      database: postgres
+      owner: rideshare
+      secret:
+        name: postgres-secret
+
+  postgresql:
+    parameters:
+      wal_level: replica
+      max_wal_senders: "10"
+      max_replication_slots: "10"
+      #hot_standby: "on"
+
+  monitoring:
+    enablePodMonitor: false

@@ -359,3 +359,215 @@ curl -O https://raw.githubusercontent.com/kubernetes/autoscaler/master/cluster-a
 ```
 kubectl apply -f cluster-autoscaler-autodiscover.yaml
 ```
+---
+
+### Install PostgreSQL StatefulSet (1 Primary + 2 Replicas)
+
+#### we deploy a PostgreSQL database on Kubernetes using a StatefulSet with streaming replication.
+
+It consists of:
+- 1 Primary PostgreSQL instance (postgres-0)
+- 2 Replica PostgreSQL instances (postgres-1, postgres-2)
+
+Replication is achieved using PostgreSQL streaming replication (WAL shipping + pg_basebackup).
+
+> ⚠️ This is a manual HA implementation. It does NOT provide automatic failover. For production, use CloudNativePG or Patroni.
+
+---
+
+#### Architecture
+
+```
+            ┌──────────────────────┐
+            │  postgres-0          │
+            │  PRIMARY             │
+            └─────────┬────────────┘
+                      │ WAL Streaming
+        ┌─────────────┼─────────────┐
+        ▼                             ▼
+┌──────────────────┐       ┌──────────────────┐
+│ postgres-1       │       │ postgres-2       │
+│ REPLICA          │       │ REPLICA          │
+└──────────────────┘       └──────────────────┘
+```
+
+---
+
+## Kubernetes Resources
+
+### 1. ConfigMap: postgres-config
+
+Defines PostgreSQL runtime configuration.
+
+**postgresql.conf**
+- wal_level = replica
+- max_wal_senders = 10
+- max_replication_slots = 10
+- hot_standby = on
+- wal_keep_size = 256MB
+- listen_addresses = '*'
+
+**pg_hba.conf**
+- replication user access
+- md5 authentication
+- open access (NOT production safe)
+
+---
+
+### 2. ConfigMap: postgres-init-scripts
+
+Creates replication user during DB initialization.
+
+- Creates role with REPLICATION privilege
+- Ensures pg_basebackup authentication works
+
+Mounted at:
+`/docker-entrypoint-initdb.d`
+
+---
+
+### 3. Headless Service: postgres-h
+
+```yaml
+clusterIP: None
+```
+
+Enables DNS-based pod discovery:
+
+- postgres-0.postgres-h
+- postgres-1.postgres-h
+- postgres-2.postgres-h
+
+Used for replication traffic.
+
+---
+
+### 4. Primary Service: postgres-primary
+
+Targets:
+- postgres-0 only
+
+Purpose:
+- Provides stable write endpoint
+
+---
+
+### 5. StatefulSet: postgres
+
+Manages PostgreSQL pods with:
+
+- Stable identities
+- Ordered startup
+- Persistent storage per pod
+
+Replicas:
+- postgres-0 (primary)
+- postgres-1 (replica)
+- postgres-2 (replica)
+
+---
+
+## Startup Flow
+
+### Primary (postgres-0)
+- Starts PostgreSQL normally
+- Accepts replication connections
+
+### Replicas (postgres-1, postgres-2)
+
+1. Wait for primary readiness
+2. Run pg_basebackup
+3. Clone primary data
+4. Start in standby mode
+
+---
+
+## Replication Mechanism
+
+Uses:
+
+### pg_basebackup
+
+Key flags:
+- -h postgres-0.postgres-h
+- -U replication_user
+- -D $PGDATA
+- -Xs (stream WAL)
+- -R (auto-configure standby)
+
+---
+
+## Storage
+
+Each pod has its own PVC:
+
+- postgres-0 → persistent volume
+- postgres-1 → persistent volume
+- postgres-2 → persistent volume
+
+Ensures data durability and isolation.
+
+---
+
+## Environment Variables
+
+From Kubernetes Secret:
+- POSTGRES_USER
+- POSTGRES_PASSWORD
+- POSTGRES_DB
+- REPLICATION_USER
+- REPLICATION_PASSWORD
+
+---
+
+## Replication Logic
+
+- postgres-0 = primary
+- postgres-1/2 = replicas
+- WAL logs streamed continuously
+- Replicas follow primary state
+
+---
+
+## Limitations
+
+- No automatic failover
+- No leader election
+- No backup strategy
+- No monitoring
+- Not production ready
+
+---
+
+## Failure Behavior
+
+If postgres-0 fails:
+- Replicas remain read-only
+- No automatic promotion occurs
+- Manual recovery required
+
+---
+
+## Production Recommendation
+
+Use:
+- CloudNativePG Operator
+- Patroni
+- CrunchyData PostgreSQL Operator
+
+For:
+- automatic failover
+- HA across AZs
+- backups to S3
+- monitoring
+
+---
+
+## Key Learnings
+
+- StatefulSet identity model
+- Headless service DNS
+- PostgreSQL streaming replication
+- pg_basebackup cloning
+- Kubernetes persistent storage
+
