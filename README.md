@@ -360,214 +360,393 @@ curl -O https://raw.githubusercontent.com/kubernetes/autoscaler/master/cluster-a
 kubectl apply -f cluster-autoscaler-autodiscover.yaml
 ```
 ---
+### PostgreSQL High Availability on Amazon EKS using CloudNativePG
 
-### Install PostgreSQL StatefulSet (1 Primary + 2 Replicas)
+#### Implementation of a highly available PostgreSQL database on Amazon EKS using CloudNativePG (CNPG).
 
-#### we deploy a PostgreSQL database on Kubernetes using a StatefulSet with streaming replication.
+The solution provides:
 
-It consists of:
-- 1 Primary PostgreSQL instance (postgres-0)
-- 2 Replica PostgreSQL instances (postgres-1, postgres-2)
-
-Replication is achieved using PostgreSQL streaming replication (WAL shipping + pg_basebackup).
-
-> ⚠️ This is a manual HA implementation. It does NOT provide automatic failover. For production, use CloudNativePG or Patroni.
+* PostgreSQL 16
+* 1 Primary instance
+* 2 Read Replica instances
+* Automated replication management
+* Automated failover
+* Persistent storage using Amazon EBS
+* Secret management using External Secrets Operator (ESO)
+* Integration with AWS Secrets Manager
 
 ---
 
 #### Architecture
 
+```text
+                        AWS Secrets Manager
+                                │
+                                │
+                                ▼
+                    External Secrets Operator
+                                │
+                                │
+                                ▼
+                     Kubernetes Secret
+                       postgres-secret
+                                │
+                                │
+                                ▼
+                      CloudNativePG Cluster
+                                │
+          ┌─────────────────────┼─────────────────────┐
+          │                     │                     │
+          ▼                     ▼                     ▼
+    postgres-1            postgres-2            postgres-3
+     Primary               Replica               Replica
+          │                     │                     │
+          └────────── Streaming Replication ─────────┘
+
+                                │
+                                ▼
+                          Amazon EBS
+                        Persistent Storage
 ```
-            ┌──────────────────────┐
-            │  postgres-0          │
-            │  PRIMARY             │
-            └─────────┬────────────┘
-                      │ WAL Streaming
-        ┌─────────────┼─────────────┐
-        ▼                             ▼
-┌──────────────────┐       ┌──────────────────┐
-│ postgres-1       │       │ postgres-2       │
-│ REPLICA          │       │ REPLICA          │
-└──────────────────┘       └──────────────────┘
+
+---
+
+#### Why CloudNativePG?
+
+Traditionally, PostgreSQL replication requires:
+
+* StatefulSets
+* Replication configuration
+* Replication users
+* WAL management
+* Failover scripts
+* Promotion logic
+
+CloudNativePG automates all these operations through a Kubernetes Operator.
+
+Benefits include:
+
+* Automated cluster creation
+* Automated replication
+* Automated failover
+* Backup support
+* Recovery support
+* Rolling upgrades
+* Kubernetes-native management
+
+---
+
+# Prerequisites
+
+## EKS Cluster
+
+A running EKS cluster with worker nodes.
+
+Verify:
+
+```bash
+kubectl get nodes
+```
+
+Expected:
+
+```text
+NAME                                            STATUS
+ip-192-168-129-187.us-east-2.compute.internal   Ready
+ip-192-168-191-123.us-east-2.compute.internal   Ready
 ```
 
 ---
 
-## Kubernetes Resources
+## StorageClass
 
-### 1. ConfigMap: postgres-config
+A StorageClass must exist.
 
-Defines PostgreSQL runtime configuration.
+Verify:
 
-**postgresql.conf**
-- wal_level = replica
-- max_wal_senders = 10
-- max_replication_slots = 10
-- hot_standby = on
-- wal_keep_size = 256MB
-- listen_addresses = '*'
+```bash
+kubectl get storageclass
+```
 
-**pg_hba.conf**
-- replication user access
-- md5 authentication
-- open access (NOT production safe)
+Example:
+
+```text
+NAME   PROVISIONER
+gp2     kubernetes.io/aws-ebs 
+```
 
 ---
 
-### 2. ConfigMap: postgres-init-scripts
+## AWS EBS CSI Driver
 
-Creates replication user during DB initialization.
+CloudNativePG relies on Persistent Volumes.
 
-- Creates role with REPLICATION privilege
-- Ensures pg_basebackup authentication works
+Verify:
 
-Mounted at:
-`/docker-entrypoint-initdb.d`
+```bash
+kubectl get csidriver
+```
+
+Expected:
+
+```text
+ebs.csi.aws.com
+```
 
 ---
 
-### 3. Headless Service: postgres-h
+## External Secrets Operator
+
+ESO synchronizes secrets from AWS Secrets Manager into Kubernetes.
+
+Verify:
+
+```bash
+kubectl get pods -n external-secrets
+```
+
+---
+
+#### Secret Management
+
+##### AWS Secrets Manager Secret
+
+A secret named:
+
+```text
+postgres-secret
+```
+
+contains:
+
+```json
+{
+  "POSTGRES_USER": "rideshare",
+  "POSTGRES_PASSWORD": "ridesharepass"
+}
+```
+
+---
+
+## ClusterSecretStore
 
 ```yaml
-clusterIP: None
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: aws-secrets-manager
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: us-east-2
+      auth:
+        jwt:
+          serviceAccountRef:
+            name: external-secrets
+            namespace: external-secrets
 ```
 
-Enables DNS-based pod discovery:
-
-- postgres-0.postgres-h
-- postgres-1.postgres-h
-- postgres-2.postgres-h
-
-Used for replication traffic.
+This allows ESO to authenticate to AWS Secrets Manager.
 
 ---
 
-### 4. Primary Service: postgres-primary
+## ExternalSecret
 
-Targets:
-- postgres-0 only
+File: `externalsecret.yaml`
 
-Purpose:
-- Provides stable write endpoint
+```yaml
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
 
----
+metadata:
+  name: postgres-secret-es
 
-### 5. StatefulSet: postgres
+spec:
+  refreshInterval: 1h
 
-Manages PostgreSQL pods with:
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
 
-- Stable identities
-- Ordered startup
-- Persistent storage per pod
+  target:
+    name: postgres-secret
+    creationPolicy: Owner
 
-Replicas:
-- postgres-0 (primary)
-- postgres-1 (replica)
-- postgres-2 (replica)
+  data:
+    - secretKey: username
+      remoteRef:
+        key: postgres-secret
+        property: POSTGRES_USER
 
----
+    - secretKey: password
+      remoteRef:
+        key: postgres-secret
+        property: POSTGRES_PASSWORD
+```
 
-## Startup Flow
+Apply:
 
-### Primary (postgres-0)
-- Starts PostgreSQL normally
-- Accepts replication connections
-
-### Replicas (postgres-1, postgres-2)
-
-1. Wait for primary readiness
-2. Run pg_basebackup
-3. Clone primary data
-4. Start in standby mode
-
----
-
-## Replication Mechanism
-
-Uses:
-
-### pg_basebackup
-
-Key flags:
-- -h postgres-0.postgres-h
-- -U replication_user
-- -D $PGDATA
-- -Xs (stream WAL)
-- -R (auto-configure standby)
+```bash
+kubectl apply -f externalsecret.yaml
+```
 
 ---
 
-## Storage
+## Verify Secret
 
-Each pod has its own PVC:
+```bash
+kubectl get secret postgres-secret
+```
 
-- postgres-0 → persistent volume
-- postgres-1 → persistent volume
-- postgres-2 → persistent volume
+Expected:
 
-Ensures data durability and isolation.
+```text
+NAME              TYPE
+postgres-secret   Opaque
+```
 
----
+Inspect:
 
-## Environment Variables
+```bash
+kubectl get secret postgres-secret -o yaml
+```
 
-From Kubernetes Secret:
-- POSTGRES_USER
-- POSTGRES_PASSWORD
-- POSTGRES_DB
-- REPLICATION_USER
-- REPLICATION_PASSWORD
+Expected keys:
 
----
-
-## Replication Logic
-
-- postgres-0 = primary
-- postgres-1/2 = replicas
-- WAL logs streamed continuously
-- Replicas follow primary state
+```yaml
+username:
+password:
+```
 
 ---
 
-## Limitations
+### PostgreSQL on Amazon EKS with CloudNativePG
 
-- No automatic failover
-- No leader election
-- No backup strategy
-- No monitoring
-- Not production ready
+#### The Rideshare platform uses **CloudNativePG (CNPG)** to deploy and manage a highly available PostgreSQL cluster on Amazon EKS. The solution provides automated replication, failover, storage management, and Kubernetes-native database operations.
 
----
+#### Deployment
 
-## Failure Behavior
+#### Install CloudNativePG
 
-If postgres-0 fails:
-- Replicas remain read-only
-- No automatic promotion occurs
-- Manual recovery required
+```bash
+helm repo add cnpg https://cloudnative-pg.github.io/charts
 
----
+helm install cnpg cnpg/cloudnative-pg \
+  -n cnpg-system \
+  --create-namespace
+```
+#### NB: The postgres manifest file has a postgres-secret that was pulled from the AWS secrets manager using the clustersecretstore and externalsecret.
+Verify installation:
 
-## Production Recommendation
+```bash
+kubectl get pods -n cnpg-system
+```
 
-Use:
-- CloudNativePG Operator
-- Patroni
-- CrunchyData PostgreSQL Operator
+### Deploy PostgreSQL Cluster
 
-For:
-- automatic failover
-- HA across AZs
-- backups to S3
-- monitoring
+```bash
+kubectl apply -f postgres-cluster.yaml
+```
 
----
+Cluster configuration:
 
-## Key Learnings
+* PostgreSQL 16
+* 3 Instances (1 Primary, 2 Replicas)
+* 20Gi gp3 EBS volume per instance
+* Streaming replication enabled
+* Credentials sourced from Kubernetes Secrets (integrated with AWS Secrets Manager via External Secrets Operator)
 
-- StatefulSet identity model
-- Headless service DNS
-- PostgreSQL streaming replication
-- pg_basebackup cloning
-- Kubernetes persistent storage
+## Validation
+
+Verify cluster health:
+
+```bash
+kubectl get cluster
+```
+
+Verify database pods:
+
+```bash
+kubectl get pods
+```
+
+## Database Access
+
+CloudNativePG automatically creates service endpoints:
+
+| Service | Purpose                      |
+| ------- | ---------------------------- |
+| `*-rw`  | Read/Write access to Primary |
+| `*-ro`  | Read-only access to Replicas |
+| `*-r`   | Read access to all instances |
+
+Applications should use the **read-write service (`-rw`)** for transactional workloads.
+
+## Connectivity Test
+
+```bash
+kubectl exec -it <postgres-pod> -- \
+psql -U rideshare -d postgres
+```
+
+```sql
+SELECT version();
+```
+
+## High Availability
+
+CloudNativePG automatically handles:
+
+* Primary/Replica replication
+* Automatic failover
+* Replica replacement
+* Cluster self-healing
+
+Failover can be tested by deleting the current primary pod:
+
+```bash
+kubectl delete pod <primary-pod>
+```
+
+The operator promotes a replica and restores the cluster to a healthy state without manual intervention.
+
+## Troubleshooting
+
+### Pods Stuck in Pending
+
+```bash
+kubectl describe pod <pod-name>
+```
+
+### PVC Binding Issues
+
+```bash
+kubectl describe pvc <pvc-name>
+```
+
+Ensure the `gp2` or `gp3`  StorageClass exists and is configured correctly.
+
+### Secret Issues
+
+```bash
+kubectl get secret postgres-secret
+```
+
+Required keys:
+
+```yaml
+username
+password
+```
+
+## Benefits
+
+* Highly Available PostgreSQL
+* Automated Replication and Failover
+* Kubernetes-Native Operations
+* Dynamic EBS Provisioning
+* AWS Secrets Manager Integration
+* Production-Ready Architecture
+* Minimal Operational Overhead
 
